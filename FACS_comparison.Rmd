@@ -1,0 +1,70 @@
+---
+title: "UMAP vs t-SNE for flow cytometry"
+output: html_notebook
+---
+
+```{r libraries}
+library(tidyverse)
+library(flowStats)
+library(umap) #this package is written in pure R and is used for Windows compatibility
+library(Rtsne)
+```
+
+```{r read in data}
+PBMC_luca <- read.FCS("pbmc_luca.fcs")
+```
+
+```{r transform and downsample}
+asinh_fun <- function(x, cofactor = 150){
+  x = asinh(x / cofactor)
+  return(x)
+}
+ 
+downsampled_df <- function(df, downsampling_factor = 10) {
+  df[seq(from = 1, to = nrow(df), by = downsampling_factor),]
+}
+
+```
+
+```{r tSNE and UMAP}
+PBMC_tbl <- PBMC_luca %>%
+  exprs %>%
+  as.tibble %>%
+  dplyr::select(contains("-A"), -Time)
+ 
+PBMC_tbl_biexp <- PBMC_tbl %>%
+  dplyr::mutate_all(funs(asinh_fun(x = .)))
+ 
+downsampled_data <- downsampled_df(df = PBMC_tbl_biexp, downsampling_factor = 100)
+ 
+PCA <- prcomp(downsampled_data)
+ 
+#t-SNE
+set.seed(13246)
+PBMC_tSNE <- Rtsne(X = PCA$x[,1:5], perplexity = 30, verbose = TRUE)
+PBMC_tSNE$Y %>%
+  as.tibble %>%
+  set_names(nm = c("tSNE1", "tSNE2")) %>%
+  bind_cols(downsampled_data) %>%
+  ggplot(aes(x = tSNE1, y = tSNE2, col = cut_number(x = `Alexa Fluor 488-A`, n = 5))) +
+  geom_point() +
+  scale_color_viridis_d(option = "inferno") +
+  labs(col = "Alexa Fluor 488-A")
+ 
+#UMAP
+PBMC_umap <- umap(d = PCA$x[,1:5], method = "umap-learn", min_dist = 0.99, n_neighbors = 150, random_state = 13246, verbose = TRUE)
+ 
+PBMC_umap$layout %>%
+  as.tibble %>%
+  set_names(nm = c("UMAP1", "UMAP2")) %>%
+  bind_cols(downsampled_data) %>%
+  ggplot(aes(x = UMAP1, y = UMAP2, col = cut_number(x = `Alexa Fluor 488-A`, n = 5))) +
+ geom_point() +
+  scale_color_viridis_d(option = "inferno") +
+  labs(col = "Alexa Fluor 488-A")
+```
+
+```{r sessionInfo}
+sessionInfo()
+```
+
