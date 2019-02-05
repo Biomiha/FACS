@@ -1,0 +1,71 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(tidyverse)
+library(openCyto)
+library(ggcyto)
+
+PBMC_luca <- list.files(path = "FR-FCM-ZZ36/", pattern = ".fcs", full.names = TRUE) %>% 
+  grep(pattern = "luca", value = TRUE) %>% 
+  read.ncdfFlowSet(.)
+
+PBMC_luca[[1]] %>% 
+  ggcyto(aes(x = `FSC-A`)) +
+  geom_density()
+
+PBMC_luca_gatingSet <- GatingSet(PBMC_luca)
+FCS_gate1_fun <- function(fr, channel = "FSC-A"){
+  peaks_found <- openCyto:::.find_peaks(x = as.numeric(unname(unlist(exprs(fr[, channel])))), num_peaks = 3)
+  openCyto::gate_mindensity2(fr, channel = channel, gate_range = sort(peaks_found$x)[1:2])
+}
+FCS_gate1_fun(getData(PBMC_luca_gatingSet[[1]]))
+
+if(require(openCyto)){
+  thisData <- getData(PBMC_luca_gatingSet)
+  nonDebris_gate <- fsApply(thisData, FCS_gate1_fun)
+  add(PBMC_luca_gatingSet, nonDebris_gate, parent = "root", name = "nonDebris")
+  recompute(PBMC_luca_gatingSet)
+}
+
+getData(PBMC_luca_gatingSet[[1]]) %>% 
+  ggcyto(aes(x = `FSC-A`)) +
+  geom_density() +
+  geom_gate(FCS_gate1_fun(getData(PBMC_luca_gatingSet[[1]])))
+
+getData(PBMC_luca_gatingSet[[1]], y = "nonDebris") %>% 
+  ggcyto(aes(x = `FSC-A`)) +
+  geom_density()
+
+FCS_gate2_fun <- function(fr, channel = "FSC-A"){
+  openCyto::gate_mindensity2(fr, channel = channel, positive = TRUE) #not sure if this argument exists anymore
+}
+
+getData(PBMC_luca_gatingSet[[1]], y = "nonDebris") %>% 
+  ggcyto(aes(x = `FSC-A`)) +
+  geom_density() +
+  geom_gate(FCS_gate2_fun(getData(PBMC_luca_gatingSet[[1]], y = "nonDebris")))
+
+if(require(openCyto)){
+  thisData <- getData(PBMC_luca_gatingSet, y = "nonDebris")
+  nonDebris_gate2 <- fsApply(thisData, FCS_gate2_fun)
+  add(PBMC_luca_gatingSet, nonDebris_gate2, parent = "nonDebris", name = "nonDebris2")
+  recompute(PBMC_luca_gatingSet)
+}
+
+getData(PBMC_luca_gatingSet[[1]], y = "nonDebris") %>% 
+  ggcyto(aes(x = `FSC-A`)) +
+  geom_density()
+
+getData(PBMC_luca_gatingSet[[1]], y = "nonDebris2") %>% 
+  ggcyto(aes(x = `FSC-A`)) +
+  geom_density()
+
+sessionInfo()
+
+```
+
